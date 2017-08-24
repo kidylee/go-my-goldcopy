@@ -2,70 +2,46 @@ package main
 
 import (
 	"flag"
-	"log"
 	"net/http"
+	"os"
 
-	"github.com/gorilla/websocket"
+	"github.com/sirupsen/logrus"
 
-	"github.com/go-redis/redis"
+	"github.com/gorilla/mux"
+	"github.com/urfave/negroni"
 )
 
 var addr = flag.String("addr", "localhost:8080", "http service address")
+var raddr = flag.String("raddr", "localhost:6379", "redis server address")
+var log = logrus.New()
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
-} // use default options
+func init() {
 
-func echo(w http.ResponseWriter, r *http.Request) {
-	c, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Print("upgrade:", err)
-		return
-	}
-	defer c.Close()
-	for {
+	flag.Parse()
 
-		mt, message, err := c.ReadMessage()
-		if err != nil {
-			log.Println("read:", err)
-			break
-		}
-		log.Printf("recv: %s", message)
-		err = c.WriteMessage(mt, message)
-		if err != nil {
-			log.Println("write:", err)
-			break
-		}
-	}
-}
+	// Log as JSON instead of the default ASCII formatter.
+	log.Formatter = new(logrus.JSONFormatter)
 
-type Hub struct {
-	redis      *redis.Client
-	clients    map[*Client]bool
-	register   chan *Client
-	unregister chan *Client
-}
+	// Output to stdout instead of the default stderr
+	// Can be any io.Writer, see below for File example
+	log.Out = os.Stdout
 
-type Client struct {
-	conn *websocket.Conn
-	send chan []byte
-}
-
-func ExampleNewClient() *redis.Client {
-	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "", // no password set
-		DB:       0,  // use default DB
-	})
-
-	return client
+	// Only log the warning severity or above.
+	log.Level = logrus.DebugLevel
 }
 
 func main() {
-	ExampleNewClient()
 
-	flag.Parse()
-	log.SetFlags(0)
-	http.HandleFunc("/", echo)
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	//router init
+	router := mux.NewRouter()
+	router.HandleFunc("/", echo)
+	router.HandleFunc("/category/{key}", getCategory).Methods("GET")
+	router.HandleFunc("/category", createCategory).Methods("POST")
+
+	//middleware init
+	n := negroni.Classic()
+	n.UseHandler(router)
+
+	//server start
+	log.Fatal(http.ListenAndServe(*addr, n))
 }
