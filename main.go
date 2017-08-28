@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/gorilla/mux"
+	"github.com/rs/cors"
 	"github.com/urfave/negroni"
 )
 
@@ -40,8 +41,11 @@ func main() {
 
 	//middleware init
 	n := negroni.Classic()
-	n.UseHandler(router)
 
+	c := cors.Default()
+	n.Use(c)
+
+	n.UseHandler(router)
 	//server start
 	log.Fatal(http.ListenAndServe(*addr, n))
 }
